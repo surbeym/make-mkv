@@ -1,0 +1,17 @@
+alias: Ripper Phone Notification
+description: Triggers a mobile notification using Python payload data
+triggers:
+  - trigger: webhook
+    webhook_id: rip_status_wh
+    allowed_methods:
+      - POST
+    local_only: true
+actions:
+  - action: notify.mobile_app_YOUR_DEVICE_NAME
+    data:
+      title: "Ripper Alert: {{ trigger.json.disk_name }}"
+      message: "Status is currently: {{ trigger.json.status }}. Please swap disk."
+      data:
+        tag: Ripper
+        timeout: "{{ trigger.json.custom_timeout | default(60) }}"
+        color: "#3498db"
