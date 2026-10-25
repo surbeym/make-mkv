@@ -36,6 +36,10 @@ CACHE_SIZE=2560
 # Add this to your Configuration section at the top
 TARGET_DRIVE_NAME = ""
 
+# --- Mode Configuration ---
+# Mode selection: 'series' (default - creates folders) or 'movie' (flat output)
+OUTPUT_MODE = "series"  # Options: 'series' or 'movie'
+
 def iso_to_seconds(iso_str):
     """Converts PT format (e.g., PT1H10M30S) to total seconds."""
     pattern = r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?'
@@ -203,15 +207,35 @@ def rip_disc(verify_mode=False, debug_mode=False):
     # --- Disc Naming Logic ---
     name_match = re.search(r'CINFO:2,0,"(.+?)"', raw_info)
     disc_title = re.sub(r'[\\/*?:"<>|]', "", name_match.group(1)).strip() if name_match else f"Disc_{int(time.time())}"
-    target_folder = os.path.join(BASE_OUTPUT_DIR, disc_title)
-    if not os.path.exists(target_folder): os.makedirs(target_folder)
+
+    if OUTPUT_MODE == "movie":
+        # For movie mode, ask for name and year
+        movie_name, movie_year = get_movie_name_and_year()
+        
+        if not movie_name:
+            return True
+        
+        # Use disc_title as the movie identifier
+        if movie_year:
+            output_name = f"{disc_title} - ({movie_year})"
+        else:
+            output_name = disc_title
+        
+        # In movie mode, rip directly to BASE_OUTPUT_DIR (no subfolder)
+        target_folder = BASE_OUTPUT_DIR
+        disc_output_name = output_name
+    else:
+        # Default series mode: create subfolder
+        target_folder = os.path.join(BASE_OUTPUT_DIR, disc_title)
+        if not os.path.exists(target_folder): os.makedirs(target_folder)
+        disc_output_name = disc_title
 
     # --- Execute Rip ---
-    print(f"\nStarting Rip for IDs ({','.join(selected_ids)}): {disc_title}")
+    print(f"\nStarting Rip for IDs ({','.join(selected_ids)}): {disc_output_name}")
     start_rip = time.perf_counter()
 
     total_titles = len(selected_ids)
-    print(f"\nStarting Rip for {total_titles} titles: {disc_title}")
+    print(f"\nStarting Rip for {total_titles} titles: {disc_output_name}")
 
     for index, tid in enumerate(selected_ids, start=1):
         # MakeMKV names default output files using the title index (e.g., title_t00.mkv)
@@ -241,7 +265,7 @@ def rip_disc(verify_mode=False, debug_mode=False):
             if result.returncode == 0:
                 print(f"DONE in {int(mt)}m {int(st)}s.")
                 progress_str = f"Ripped Title {index}/{total_titles}"
-                send_ha_notification(disc_title, progress_str,300)
+                send_ha_notification(disc_output_name, progress_str, 300)
             else:
                 print("FAILED")
                 print(f"[!] Error Log: {result.stderr}")
@@ -255,8 +279,8 @@ def rip_disc(verify_mode=False, debug_mode=False):
     m, s = divmod(rip_duration, 60)
     print(f"\n[SUCCESS] Total Rip process finished in {int(m)}m {int(s)}s.")
 
-    # Fire the notification to Home Assistant before ejecting
-    send_ha_notification(disc_title, "Ripped. Please Swap Disc")
+      # Fire the notification to Home Assistant before ejecting
+    send_ha_notification(disc_output_name, "Ripped. Please Swap Disc")
 
     print(f"\nRip finished. Force Ejecting {DRIVE_LETTER}...")
     windows_native_eject(DRIVE_LETTER)
@@ -311,6 +335,29 @@ def smart_swap_wait(seconds, poll_interval=10):
     return False
 
 
+def get_movie_name_and_year():
+      """Prompts user for movie name and year (optional). Returns clean tuple."""
+      # Get movie title
+    name = input("\nEnter the movie name: ").strip()
+    
+    if not name:
+        print("[!] No name provided. Skipping rip.")
+        return None, None
+    
+      # Get year (optional)
+    year_input = input("\nEnter the movie year (optional): ").strip()
+    year = ""
+    
+    if year_input:
+          # Validate it's a 4-digit year
+        if re.match(r'\d{4}', year_input):
+            year = year_input
+        else:
+            print("[!] Invalid year format. Proceeding without year.")
+    
+    return name, year
+
+
 def send_ha_notification(discName, message, timeout=60):
     """Sends a silent webhook to Home Assistant. Fails silently on any error."""
 
@@ -358,7 +405,15 @@ if __name__ == "__main__":
         elif arg == "--no-overwrite":
             is_overwrite = False
 
-        # Value Overrides (Key=Value)
+         # Output Mode selection
+        elif arg == "--movie":
+            OUTPUT_MODE = "movie"
+            print(" [*] Movie mode enabled: single file output (no subfolders)")
+        elif arg == "--no-movie":
+            OUTPUT_MODE = "series"
+            print(" [*] Series mode enabled: creates subfolders per disc")
+
+         # Value Overrides (Key=Value)
         elif arg.startswith("--cache="):
             CACHE_SIZE = arg.split("=")[1]
         elif arg.startswith("--min="):
