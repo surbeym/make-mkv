@@ -11,11 +11,13 @@ from tqdm import tqdm
 # --- Windows Configuration ---
 MAKEMKV_BIN = r"C:\Program Files (x86)\MakeMKV\makemkvcon.exe"
 BASE_OUTPUT_DIR = r"D:\Video"
+# Default: Do not overwrite existing files (safe mode)
+is_overwrite = False
 
 # --- Title Filters (ISO-8601 Format) ---
 # Format: PT[H]H[M]M[S]S  (e.g., PT1H10M or PT15M)
-MIN_LENGTH_ISO = "PT30M"
-MAX_LENGTH_ISO = "PT1H"
+MIN_LENGTH_ISO = "PT25M"
+MAX_LENGTH_ISO = "PT1H15M"
 INFO_TIMEOUT_ISO = "PT10M00S"
 
 # --- Delay Configuration ---
@@ -212,6 +214,15 @@ def rip_disc(verify_mode=False, debug_mode=False):
     print(f"\nStarting Rip for {total_titles} titles: {disc_title}")
 
     for index, tid in enumerate(selected_ids, start=1):
+        # MakeMKV names default output files using the title index (e.g., title_t00.mkv)
+        # We check if a file containing this title ID already exists in the folder
+        existing_files = os.listdir(target_folder) if os.path.exists(target_folder) else []
+        matching_files = [f for f in existing_files if f"t{int(tid):02d}" in f.lower() or f"title_{tid}" in f.lower()]
+
+        if matching_files and not is_overwrite:
+            print(f" >>> Title {tid}: File already exists ({matching_files[0]}). Skipping.")
+            continue
+
         print(f" >>> Ripping Title {tid}... ", end="", flush=True)
 
         # String-style command with your 2.5GB cache
@@ -342,6 +353,10 @@ if __name__ == "__main__":
             is_progress = True
         elif arg == "--no-progress":
             is_progress = False
+        elif arg == "--overwrite":
+            is_overwrite = True
+        elif arg == "--no-overwrite":
+            is_overwrite = False
 
         # Value Overrides (Key=Value)
         elif arg.startswith("--cache="):
