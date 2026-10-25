@@ -336,20 +336,20 @@ def smart_swap_wait(seconds, poll_interval=10):
 
 
 def get_movie_name_and_year():
-      """Prompts user for movie name and year (optional). Returns clean tuple."""
-      # Get movie title
+    """Prompts user for movie name and year (optional). Returns clean tuple."""
+    # Get movie title
     name = input("\nEnter the movie name: ").strip()
     
     if not name:
         print("[!] No name provided. Skipping rip.")
         return None, None
     
-      # Get year (optional)
+    # Get year (optional)
     year_input = input("\nEnter the movie year (optional): ").strip()
     year = ""
     
     if year_input:
-          # Validate it's a 4-digit year
+        # Validate it's a 4-digit year
         if re.match(r'\d{4}', year_input):
             year = year_input
         else:
@@ -408,12 +408,14 @@ if __name__ == "__main__":
          # Output Mode selection
         elif arg == "--movie":
             OUTPUT_MODE = "movie"
+            MIN_LENGTH_ISO = "PT1H25M"
+            MAX_LENGTH_ISO = "PT1H15M"
             print(" [*] Movie mode enabled: single file output (no subfolders)")
         elif arg == "--no-movie":
             OUTPUT_MODE = "series"
             print(" [*] Series mode enabled: creates subfolders per disc")
 
-         # Value Overrides (Key=Value)
+        # Value Overrides (Key=Value)
         elif arg.startswith("--cache="):
             CACHE_SIZE = arg.split("=")[1]
         elif arg.startswith("--min="):
