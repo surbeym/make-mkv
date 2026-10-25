@@ -11,11 +11,9 @@ from contextlib import redirect_stdout
 import re
 import importlib.util
 
-# Import the function from make-mkv module using importlib
-sys.path.insert(0, '/Users/msurbey/Development/make-mkv')
-
 # Load make-mkv module dynamically (handle hyphen in filename)
-spec = importlib.util.spec_from_file_location("make_mkvtv", "/Users/msurbey/Development/make-mkv/make-mkv.py")
+sys.path.insert(0, '.')
+spec = importlib.util.spec_from_file_location("make_mkvtv", "make-mkv.py")
 make_mkvtv_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(make_mkvtv_module)
 
@@ -32,10 +30,10 @@ class TestShowDetailedProbe:
         self.default_min_length = iso_to_seconds("PT25M")  # 1500 seconds
         self.default_max_length = iso_to_seconds("PT1H15M")  # 4500 seconds
         
-        # Load actual sample files from info-samples directory
-        with open("/Users/msurbey/Development/make-mkv/info-samples/info-sample-movie.txt", 'r') as f:
+         # Load actual sample files from info-samples directory
+        with open("info-samples/info-sample-movie.txt", 'r') as f:
             self.sample_movie_data = f.read()
-        with open("/Users/msurbey/Development/make-mkv/info-samples/info-sample-tv-show.txt", 'r') as f:
+        with open("info-samples/info-sample-tv-show.txt", 'r') as f:
             self.sample_tv_data = f.read()
     
     def test_empty_output_returns_zero(self):
