@@ -52,15 +52,31 @@ class TestShowDetailedProbe:
         output = io.StringIO()
         with redirect_stdout(output):
             result = show_detailed_probe(self.sample_movie_data)
-        
+
         # Verify function returns 0 (Equilibrium 1:46:32 exceeds 75min max filter)
         assert result == 0
-        
+
         # Verify output contains expected disc name
         output_text = output.getvalue()
         assert "Equilibrium" in output_text
         assert "1:46:32" in output_text
         assert "SKIP" in output_text  # Should be skipped due to duration
+
+    def test_movie_disc_parsing_pass(self):
+        """Test parsing single-title movie disc from info-sample-movie.txt (Equilibrium)"""
+        output = io.StringIO()
+        with redirect_stdout(output):
+            result = show_detailed_probe(self.sample_movie_data, "PT15M", "PT4H")
+
+        # Verify function returns 0 (Equilibrium 1:46:32 exceeds 75min max filter)
+        assert result == 1
+
+        # Verify output contains expected disc name
+        output_text = output.getvalue()
+        assert "Equilibrium" in output_text
+        assert "1:46:32" in output_text
+        assert "WILL RIP" in output_text  # Should be skipped due to duration
+
 
     def test_tv_show_disc_parsing(self):
         """Test parsing multi-title TV show disc from info-sample-tv-show.txt (SG1)"""

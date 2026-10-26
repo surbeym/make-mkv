@@ -30,8 +30,7 @@ SWAP_DELAY_ISO = "PT1M"  # 1 Minute (Change to PT2M, PT30S, etc.)
 HA_WEBHOOK_URL = os.getenv("HA_WEBHOOK_URL", "http://localhost:8123/api/webhook/rip_status_wh")
 
 # Configured with a 2.5GB cache (--cache=2560) to maximize read speeds and reduce drive wear.
-CACHE_SIZE=2560
-
+CACHE_SIZE = 2560
 
 # Add this to your Configuration section at the top
 TARGET_DRIVE_NAME = ""
@@ -39,6 +38,7 @@ TARGET_DRIVE_NAME = ""
 # --- Mode Configuration ---
 # Mode selection: 'series' (default - creates folders) or 'movie' (flat output)
 OUTPUT_MODE = "series"  # Options: 'series' or 'movie'
+
 
 def iso_to_seconds(iso_str):
     """Converts PT format (e.g., PT1H10M30S) to total seconds."""
@@ -52,6 +52,7 @@ def iso_to_seconds(iso_str):
     seconds = int(match.group(3)) if match.group(3) else 0
 
     return (hours * 3600) + (minutes * 60) + seconds
+
 
 # Convert ISO strings to integers
 MIN_LENGTH = iso_to_seconds(MIN_LENGTH_ISO)
@@ -87,16 +88,19 @@ def get_drive_info():
 
     return None, None  # Return None to indicate failure
 
+
 def windows_native_eject(letter):
     """Force eject via Windows IOCTL."""
     IOCTL_STORAGE_EJECT_MEDIA = 0x2D4808
     device_path = f"\\\\.\\{letter.strip(':')}:"
     handle = ctypes.windll.kernel32.CreateFileW(device_path, 0x80000000, 0x01 | 0x02, None, 3, 0, None)
     if handle != -1:
-        ctypes.windll.kernel32.DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, None, 0, None, 0, ctypes.byref(ctypes.c_ulong()), None)
+        ctypes.windll.kernel32.DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, None, 0, None, 0,
+                                               ctypes.byref(ctypes.c_ulong()), None)
         ctypes.windll.kernel32.CloseHandle(handle)
         return True
     return False
+
 
 def format_seconds_to_iso(seconds):
     h, m = seconds // 3600, (seconds % 3600) // 60
@@ -105,11 +109,12 @@ def format_seconds_to_iso(seconds):
     if m > 0: parts.append(f"{m}M")
     return "".join(parts) if len(parts) > 1 else "PT0S"
 
+
 def get_raw_data_with_progress():
     """Queries the ASUS drive with an explicit minimum length filter."""
     raw_info = ""
     print(f"[{time.strftime('%H:%M:%S')}] Querying ASUS Drive (Index:{DRIVE_INDEX} / {DRIVE_LETTER})...")
-    start_info = time.perf_counter() # Start Timer
+    start_info = time.perf_counter()  # Start Timer
     stop_timer = False
 
     def stopwatch():
@@ -127,7 +132,8 @@ def get_raw_data_with_progress():
             MAKEMKV_BIN, "-r", "info", f"disc:{DRIVE_INDEX}",
             f"--minlength={MIN_LENGTH}"
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW, timeout=INFO_TIMEOUT)
+        result = subprocess.run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW,
+                                timeout=INFO_TIMEOUT)
         raw_info = result.stdout
     except Exception as e:
         print(f"\n[!] Error during scan: {e}")
@@ -135,30 +141,48 @@ def get_raw_data_with_progress():
         stop_timer = True
         timer_thread.join()
 
-    end_info = time.perf_counter() # End Timer
+    end_info = time.perf_counter()  # End Timer
     duration = end_info - start_info
-    print(f"[*] Info scan completed in {duration:.2f} seconds.") # Log it
+    print(f"[*] Info scan completed in {duration:.2f} seconds.")  # Log it
     return raw_info
 
-def show_detailed_probe(raw_output):
+
+def show_detailed_probe(raw_output, min_seconds_iso=None, max_seconds_iso=None):
+    """
+    Display detailed probe report for disc titles.
+    
+    Args:
+        raw_output: Raw output from MakeMKV info command
+        min_seconds: Override minimum duration in seconds (uses MIN_LENGTH if None)
+        max_seconds: Override maximum duration in seconds (uses MAX_LENGTH if None)
+    
+    Returns:
+        Count of titles that would be ripped
+    """
+    # Use provided values or fall back to module-level constants
+    min_len = iso_to_seconds(min_seconds_iso) if min_seconds_iso is not None else MIN_LENGTH
+    max_len = iso_to_seconds(max_seconds_iso) if max_seconds_iso is not None else MAX_LENGTH
+
     if not raw_output or "MSG:5073" in raw_output:
         print("\n[!] No titles found.")
         return 0
     name_match = re.search(r'CINFO:2,0,"(.+?)"', raw_output)
     disc_name = name_match.group(1) if name_match else "Unknown Volume"
     titles = re.findall(r'TINFO:(\d+),9,0,"(\d+:\d+:\d+)"', raw_output)
-    print("\n" + "="*75 + f"\n PROBE REPORT for: {disc_name}\n" + "="*75)
-    print(f"{'ID':<5} | {'Duration':<10} | {'Total Sec':<10} | {'Decision'}\n" + "-"*75)
+    print("\n" + "=" * 75 + f"\n PROBE REPORT for: {disc_name}\n" + "=" * 75)
+    print(f"{'ID':<5} | {'Duration':<10} | {'Total Sec':<10} | {'Decision'}\n" + "-" * 75)
     rip_count = 0
     for tid, dur in titles:
         h, m, s = map(int, dur.split(':'))
-        total_sec = h*3600 + m*60 + s
-        status = ">>> WILL RIP <<<" if MIN_LENGTH <= total_sec <= MAX_LENGTH else "SKIP"
+        total_sec = h * 3600 + m * 60 + s
+        status = ">>> WILL RIP <<<" if min_len <= total_sec <= max_len else "SKIP"
         if status == ">>> WILL RIP <<<": rip_count += 1
         print(f"{tid:<5} | {dur:<10} | {total_sec:<10} | {status}")
     print("-" * 75)
-    print(f"Summary: {rip_count} selected (Min: {MIN_LENGTH}s ({format_seconds_to_iso(MIN_LENGTH)}) / Max: {MAX_LENGTH}s ({format_seconds_to_iso(MAX_LENGTH)}))")
+    print(
+        f"Summary: {rip_count} selected (Min: {min_len}s ({format_seconds_to_iso(min_len)}) / Max: {max_len}s ({format_seconds_to_iso(max_len)}))")
     return rip_count
+
 
 def rip_disc(verify_mode=False, debug_mode=False):
     raw_info = get_raw_data_with_progress()
@@ -170,7 +194,8 @@ def rip_disc(verify_mode=False, debug_mode=False):
     titles = re.findall(r'TINFO:(\d+),9,0,"(\d+:\d+:\d+)"', raw_info)
 
     # Initial selection based on your PT filters
-    selected_ids = [t[0] for t in titles if MIN_LENGTH <= (lambda x: int(x[0])*3600 + int(x[1])*60 + int(x[2]))(t[1].split(':')) <= MAX_LENGTH]
+    selected_ids = [t[0] for t in titles if MIN_LENGTH <= (lambda x: int(x[0]) * 3600 + int(x[1]) * 60 + int(x[2]))(
+        t[1].split(':')) <= MAX_LENGTH]
 
     show_detailed_probe(raw_info)
     if verify_mode:
@@ -185,7 +210,7 @@ def rip_disc(verify_mode=False, debug_mode=False):
         choice = input("\nChoose an option: ").lower()
 
         if choice == 'y':
-            pass # Keep selected_ids as they are
+            pass  # Keep selected_ids as they are
         elif choice == 's':
             manual_input = input("Enter the IDs you want to rip, separated by commas: ")
             # Clean up input (remove spaces, split by comma)
@@ -193,7 +218,7 @@ def rip_disc(verify_mode=False, debug_mode=False):
         elif choice == 'e':
             print(f"Ejecting {DRIVE_LETTER}...")
             windows_native_eject(DRIVE_LETTER)
-            return True # Loops back to wait for next disc
+            return True  # Loops back to wait for next disc
         elif choice == 'q':
             return "STOP"
         else:
@@ -211,16 +236,16 @@ def rip_disc(verify_mode=False, debug_mode=False):
     if OUTPUT_MODE == "movie":
         # For movie mode, ask for name and year
         movie_name, movie_year = get_movie_name_and_year()
-        
+
         if not movie_name:
             return True
-        
+
         # Use disc_title as the movie identifier
         if movie_year:
             output_name = f"{disc_title} - ({movie_year})"
         else:
             output_name = disc_title
-        
+
         # In movie mode, rip directly to BASE_OUTPUT_DIR (no subfolder)
         target_folder = BASE_OUTPUT_DIR
         disc_output_name = output_name
@@ -253,7 +278,7 @@ def rip_disc(verify_mode=False, debug_mode=False):
         rip_cmd = f'"{MAKEMKV_BIN}" -r mkv disc:{DRIVE_INDEX} {tid} "{target_folder}" --cache={CACHE_SIZE} --minlength={MIN_LENGTH}'
 
         if not debug_mode:
-            start_rip_title = time.perf_counter() # Start title timer
+            start_rip_title = time.perf_counter()  # Start title timer
 
             # Run the command
             result = subprocess.run(rip_cmd, shell=True, capture_output=True, text=True)
@@ -270,7 +295,7 @@ def rip_disc(verify_mode=False, debug_mode=False):
                 print("FAILED")
                 print(f"[!] Error Log: {result.stderr}")
         else:
-            print("\n" + "="*20 + " DEBUG MODE " + "="*20)
+            print("\n" + "=" * 20 + " DEBUG MODE " + "=" * 20)
             print(f"\n[EXEC]: {rip_cmd}")
             subprocess.run(rip_cmd, shell=True)
 
@@ -279,12 +304,13 @@ def rip_disc(verify_mode=False, debug_mode=False):
     m, s = divmod(rip_duration, 60)
     print(f"\n[SUCCESS] Total Rip process finished in {int(m)}m {int(s)}s.")
 
-      # Fire the notification to Home Assistant before ejecting
+    # Fire the notification to Home Assistant before ejecting
     send_ha_notification(disc_output_name, "Ripped. Please Swap Disc")
 
     print(f"\nRip finished. Force Ejecting {DRIVE_LETTER}...")
     windows_native_eject(DRIVE_LETTER)
     return True
+
 
 def countdown_timer(seconds):
     """Displays a countdown timer in the console."""
@@ -296,9 +322,11 @@ def countdown_timer(seconds):
         time.sleep(1)
     print("\n")
 
+
 def clear_terminal():
     # 'cls' is for Windows, 'clear' is for Linux/Mac
     os.system('cls' if os.name == 'nt' else 'clear')
+
 
 def smart_swap_wait(seconds, poll_interval=10):
     """
@@ -339,22 +367,22 @@ def get_movie_name_and_year():
     """Prompts user for movie name and year (optional). Returns clean tuple."""
     # Get movie title
     name = input("\nEnter the movie name: ").strip()
-    
+
     if not name:
         print("[!] No name provided. Skipping rip.")
         return None, None
-    
+
     # Get year (optional)
     year_input = input("\nEnter the movie year (optional): ").strip()
     year = ""
-    
+
     if year_input:
         # Validate it's a 4-digit year
         if re.match(r'\d{4}', year_input):
             year = year_input
         else:
             print("[!] Invalid year format. Proceeding without year.")
-    
+
     return name, year
 
 
@@ -405,7 +433,7 @@ if __name__ == "__main__":
         elif arg == "--no-overwrite":
             is_overwrite = False
 
-         # Output Mode selection
+        # Output Mode selection
         elif arg == "--movie":
             OUTPUT_MODE = "movie"
             MIN_LENGTH_ISO = "PT1H25M"
